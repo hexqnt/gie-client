@@ -7,7 +7,6 @@ description = "Strictly-typed, unofficial Rust client for downloading GIE AGSI a
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/hexqnt/gie-client"
-homepage = "https://github.com/hexqnt/gie-client"
 documentation = "https://docs.rs/gie-client"
 keywords = ["gie", "agsi", "alsi", "energy", "api-client"]
 categories = ["api-bindings", "web-programming::http-client"]
