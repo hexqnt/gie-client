@@ -109,3 +109,19 @@ Environment variables used by examples:
 - `GIE_API_KEY`
 - `GIE_PROXY_URL`
 - `GIE_USER_AGENT`
+
+## Live Contract Tests
+
+Live contract tests hit the real GIE API and are intentionally excluded from the default CI test job.
+
+Run public live tests locally:
+
+```bash
+GIE_LIVE_TESTS=1 cargo test --test live_api_contract -- --ignored
+```
+
+Run public + auth live tests locally:
+
+```bash
+GIE_API_KEY=... GIE_LIVE_TESTS=1 cargo test --test live_api_contract -- --ignored
+```

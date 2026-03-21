@@ -1,0 +1,33 @@
+name: Live Contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  live-contract:
+    name: Live API contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GIE_LIVE_TESTS: "1"
+      GIE_API_KEY: ${{ secrets.GIE_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "stable"
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Live contract tests
+        run: cargo test --test live_api_contract -- --ignored
