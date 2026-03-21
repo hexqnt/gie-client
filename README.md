@@ -3,6 +3,7 @@
 A lightweight Rust client for GIE transparency APIs: **AGSI** and **ALSI**.
 
 [![CI](https://github.com/hexqnt/gie-client/actions/workflows/ci.yml/badge.svg)](https://github.com/hexqnt/gie-client/actions/workflows/ci.yml)
+[![Live Contract](https://github.com/hexqnt/gie-client/actions/workflows/live-contract.yml/badge.svg)](https://github.com/hexqnt/gie-client/actions/workflows/live-contract.yml)
 [![crates.io](https://img.shields.io/crates/v/gie-client.svg)](https://crates.io/crates/gie-client)
 [![docs.rs](https://docs.rs/gie-client/badge.svg)](https://docs.rs/gie-client)
 
