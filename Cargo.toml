@@ -1,6 +1,6 @@
 [package]
 name = "gie-client"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["hexqnt <hexqntlab@gmail.com>"]
 description = "Strictly-typed, unofficial Rust client for downloading GIE AGSI and ALSI data."

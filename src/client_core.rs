@@ -57,15 +57,15 @@ impl BlockingClientCore {
     fn new_inner(http: reqwest::blocking::Client, api_key: Option<String>) -> Self {
         Self {
             http,
-            api_key,
-            user_agent: Some(DEFAULT_BROWSER_USER_AGENT.to_string()),
+            api_key: normalize_header_text(api_key),
+            user_agent: normalize_header_text(Some(DEFAULT_BROWSER_USER_AGENT.to_string())),
             debug_requests: false,
             rate_limiter: Some(Arc::new(RateLimiter::new(RateLimitConfig::default()))),
         }
     }
 
     pub(crate) fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
-        self.user_agent = Some(user_agent.into());
+        self.user_agent = normalize_header_text(Some(user_agent.into()));
         self
     }
 
@@ -92,30 +92,27 @@ impl BlockingClientCore {
         self
     }
 
-    pub(crate) fn fetch_page<E>(&self, query: &GieQuery) -> Result<GiePage<E::Record>, GieError>
-    where
-        E: Endpoint,
-    {
-        let context = RequestContext {
+    fn request_context(&self) -> RequestContext<'_> {
+        RequestContext {
             api_key: self.api_key.as_deref(),
             user_agent: self.user_agent.as_deref(),
             debug_requests: self.debug_requests,
             rate_limiter: self.rate_limiter.as_deref(),
-        };
+        }
+    }
 
-        fetch_page(&self.http, E::URL, context, query, None)
+    pub(crate) fn fetch_page<E>(&self, query: &GieQuery) -> Result<GiePage<E::Record>, GieError>
+    where
+        E: Endpoint,
+    {
+        fetch_page(&self.http, E::URL, self.request_context(), query, None)
     }
 
     pub(crate) fn fetch_all<E>(&self, query: &GieQuery) -> Result<Vec<E::Record>, GieError>
     where
         E: Endpoint,
     {
-        let context = RequestContext {
-            api_key: self.api_key.as_deref(),
-            user_agent: self.user_agent.as_deref(),
-            debug_requests: self.debug_requests,
-            rate_limiter: self.rate_limiter.as_deref(),
-        };
+        let context = self.request_context();
 
         fetch_all_pages(query.initial_page(), |page| {
             fetch_page(&self.http, E::URL, context, query, Some(page))
@@ -158,15 +155,15 @@ impl AsyncClientCore {
     fn new_inner(http: reqwest::Client, api_key: Option<String>) -> Self {
         Self {
             http,
-            api_key,
-            user_agent: Some(DEFAULT_BROWSER_USER_AGENT.to_string()),
+            api_key: normalize_header_text(api_key),
+            user_agent: normalize_header_text(Some(DEFAULT_BROWSER_USER_AGENT.to_string())),
             debug_requests: false,
             rate_limiter: Some(Arc::new(RateLimiter::new(RateLimitConfig::default()))),
         }
     }
 
     pub(crate) fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
-        self.user_agent = Some(user_agent.into());
+        self.user_agent = normalize_header_text(Some(user_agent.into()));
         self
     }
 
@@ -193,6 +190,15 @@ impl AsyncClientCore {
         self
     }
 
+    fn request_context(&self) -> RequestContext<'_> {
+        RequestContext {
+            api_key: self.api_key.as_deref(),
+            user_agent: self.user_agent.as_deref(),
+            debug_requests: self.debug_requests,
+            rate_limiter: self.rate_limiter.as_deref(),
+        }
+    }
+
     pub(crate) async fn fetch_page<E>(
         &self,
         query: &GieQuery,
@@ -200,26 +206,14 @@ impl AsyncClientCore {
     where
         E: Endpoint,
     {
-        let context = RequestContext {
-            api_key: self.api_key.as_deref(),
-            user_agent: self.user_agent.as_deref(),
-            debug_requests: self.debug_requests,
-            rate_limiter: self.rate_limiter.as_deref(),
-        };
-
-        fetch_page_async(&self.http, E::URL, context, query, None).await
+        fetch_page_async(&self.http, E::URL, self.request_context(), query, None).await
     }
 
     pub(crate) async fn fetch_all<E>(&self, query: &GieQuery) -> Result<Vec<E::Record>, GieError>
     where
         E: Endpoint,
     {
-        let context = RequestContext {
-            api_key: self.api_key.as_deref(),
-            user_agent: self.user_agent.as_deref(),
-            debug_requests: self.debug_requests,
-            rate_limiter: self.rate_limiter.as_deref(),
-        };
+        let context = self.request_context();
 
         fetch_all_pages_async(query.initial_page(), |page| async move {
             fetch_page_async(&self.http, E::URL, context, query, Some(page)).await
@@ -256,6 +250,29 @@ macro_rules! client_configuration_tests {
 
             assert!(blocking_client.core.api_key.is_some());
             assert!(async_client.core.api_key.is_some());
+        }
+
+        #[test]
+        fn headers_are_normalized_on_configuration() {
+            let blocking_client = $blocking_client::new(" key ");
+            let async_client = $async_client::new(" key ");
+            assert_eq!(blocking_client.core.api_key.as_deref(), Some("key"));
+            assert_eq!(async_client.core.api_key.as_deref(), Some("key"));
+
+            let blocking_blank_key = $blocking_client::new("  ");
+            let async_blank_key = $async_client::new("  ");
+            assert!(blocking_blank_key.core.api_key.is_none());
+            assert!(async_blank_key.core.api_key.is_none());
+
+            let blocking_agent = $blocking_client::without_api_key().with_user_agent(" ua ");
+            let async_agent = $async_client::without_api_key().with_user_agent(" ua ");
+            assert_eq!(blocking_agent.core.user_agent.as_deref(), Some("ua"));
+            assert_eq!(async_agent.core.user_agent.as_deref(), Some("ua"));
+
+            let blocking_blank_agent = $blocking_client::without_api_key().with_user_agent(" ");
+            let async_blank_agent = $async_client::without_api_key().with_user_agent(" ");
+            assert!(blocking_blank_agent.core.user_agent.is_none());
+            assert!(async_blank_agent.core.user_agent.is_none());
         }
 
         #[test]
@@ -302,3 +319,16 @@ macro_rules! client_configuration_tests {
 
 #[cfg(test)]
 pub(crate) use client_configuration_tests;
+
+fn normalize_header_text(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if trimmed.len() == value.len() {
+            return Some(value);
+        }
+        Some(trimmed.to_string())
+    })
+}

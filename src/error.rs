@@ -30,6 +30,9 @@ pub enum GieError {
     /// Invalid page size input provided by caller.
     #[error("invalid size input: {0}")]
     InvalidSizeInput(String),
+    /// Invalid text filter input provided by caller.
+    #[error("invalid text filter input: {0}")]
+    InvalidTextFilterInput(String),
     /// Invalid date range input provided by caller.
     #[error("invalid date range input: {0}")]
     InvalidDateRangeInput(String),

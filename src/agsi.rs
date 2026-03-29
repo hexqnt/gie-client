@@ -5,6 +5,8 @@ use std::num::NonZeroU32;
 use serde::Deserialize;
 
 use crate::client_core::{AsyncClientCore, BlockingClientCore, Endpoint};
+#[cfg(feature = "polars")]
+use crate::common::polars_core::CommonFrameColumns;
 use crate::common::{
     GieDate, GiePage, GieQuery, RecordType,
     serde_ext::{
@@ -13,8 +15,6 @@ use crate::common::{
     },
     time_series::group_time_series,
 };
-#[cfg(feature = "polars")]
-use crate::common::{format_date, serde_ext::json_vec_to_string};
 use crate::error::GieError;
 #[cfg(feature = "polars")]
 use polars::prelude::{DataFrame, NamedFrom, Series};
@@ -36,27 +36,32 @@ pub struct AgsiClient {
 }
 
 impl AgsiClient {
+    fn from_core(core: BlockingClientCore) -> Self {
+        Self { core }
+    }
+
+    fn map_core(self, map: impl FnOnce(BlockingClientCore) -> BlockingClientCore) -> Self {
+        Self::from_core(map(self.core))
+    }
+
     /// Creates a client with an API key.
     pub fn new(api_key: impl Into<String>) -> Self {
-        Self {
-            core: BlockingClientCore::new(api_key),
-        }
+        Self::from_core(BlockingClientCore::new(api_key))
     }
 
     /// Creates a client without an API key.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn without_api_key() -> Self {
-        Self {
-            core: BlockingClientCore::without_api_key(),
-        }
+        Self::from_core(BlockingClientCore::without_api_key())
     }
 
     /// Creates a client using an external blocking HTTP client.
     pub fn with_http_client(api_key: impl Into<String>, http: reqwest::blocking::Client) -> Self {
-        Self {
-            core: BlockingClientCore::with_http_client(Some(api_key.into()), http),
-        }
+        Self::from_core(BlockingClientCore::with_http_client(
+            Some(api_key.into()),
+            http,
+        ))
     }
 
     /// Creates a blocking client configured with a proxy URL.
@@ -64,57 +69,46 @@ impl AgsiClient {
         api_key: impl Into<String>,
         proxy_url: impl AsRef<str>,
     ) -> Result<Self, GieError> {
-        Ok(Self {
-            core: BlockingClientCore::with_proxy(Some(api_key.into()), proxy_url)?,
-        })
+        BlockingClientCore::with_proxy(Some(api_key.into()), proxy_url).map(Self::from_core)
     }
 
     /// Creates a client without an API key using an external blocking HTTP client.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn with_http_client_without_api_key(http: reqwest::blocking::Client) -> Self {
-        Self {
-            core: BlockingClientCore::with_http_client(None, http),
-        }
+        Self::from_core(BlockingClientCore::with_http_client(None, http))
     }
 
     /// Creates a blocking client without an API key and with proxy support.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn with_proxy_without_api_key(proxy_url: impl AsRef<str>) -> Result<Self, GieError> {
-        Ok(Self {
-            core: BlockingClientCore::with_proxy(None, proxy_url)?,
-        })
+        BlockingClientCore::with_proxy(None, proxy_url).map(Self::from_core)
     }
 
     /// Overrides the `User-Agent` header used for API requests.
     pub fn with_user_agent(self, user_agent: impl Into<String>) -> Self {
-        let core = self.core.with_user_agent(user_agent);
-        Self { core }
+        self.map_core(|core| core.with_user_agent(user_agent))
     }
 
     /// Disables sending the `User-Agent` header.
     pub fn without_user_agent(self) -> Self {
-        let core = self.core.without_user_agent();
-        Self { core }
+        self.map_core(BlockingClientCore::without_user_agent)
     }
 
     /// Enables or disables debug logging of outgoing requests.
     pub fn with_debug_requests(self, enabled: bool) -> Self {
-        let core = self.core.with_debug_requests(enabled);
-        Self { core }
+        self.map_core(|core| core.with_debug_requests(enabled))
     }
 
     /// Sets per-process request limit (requests per minute).
     pub fn with_rate_limit(self, requests_per_minute: NonZeroU32) -> Self {
-        let core = self.core.with_rate_limit(requests_per_minute);
-        Self { core }
+        self.map_core(|core| core.with_rate_limit(requests_per_minute))
     }
 
     /// Disables built-in per-process rate limiting.
     pub fn without_rate_limit(self) -> Self {
-        let core = self.core.without_rate_limit();
-        Self { core }
+        self.map_core(BlockingClientCore::without_rate_limit)
     }
 
     /// Fetches a single page of AGSI records.
@@ -155,27 +149,32 @@ pub struct AgsiAsyncClient {
 }
 
 impl AgsiAsyncClient {
+    fn from_core(core: AsyncClientCore) -> Self {
+        Self { core }
+    }
+
+    fn map_core(self, map: impl FnOnce(AsyncClientCore) -> AsyncClientCore) -> Self {
+        Self::from_core(map(self.core))
+    }
+
     /// Creates an async client with an API key.
     pub fn new(api_key: impl Into<String>) -> Self {
-        Self {
-            core: AsyncClientCore::new(api_key),
-        }
+        Self::from_core(AsyncClientCore::new(api_key))
     }
 
     /// Creates an async client without an API key.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn without_api_key() -> Self {
-        Self {
-            core: AsyncClientCore::without_api_key(),
-        }
+        Self::from_core(AsyncClientCore::without_api_key())
     }
 
     /// Creates an async client using an external HTTP client.
     pub fn with_http_client(api_key: impl Into<String>, http: reqwest::Client) -> Self {
-        Self {
-            core: AsyncClientCore::with_http_client(Some(api_key.into()), http),
-        }
+        Self::from_core(AsyncClientCore::with_http_client(
+            Some(api_key.into()),
+            http,
+        ))
     }
 
     /// Creates an async client configured with a proxy URL.
@@ -183,57 +182,46 @@ impl AgsiAsyncClient {
         api_key: impl Into<String>,
         proxy_url: impl AsRef<str>,
     ) -> Result<Self, GieError> {
-        Ok(Self {
-            core: AsyncClientCore::with_proxy(Some(api_key.into()), proxy_url)?,
-        })
+        AsyncClientCore::with_proxy(Some(api_key.into()), proxy_url).map(Self::from_core)
     }
 
     /// Creates an async client without an API key using an external HTTP client.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn with_http_client_without_api_key(http: reqwest::Client) -> Self {
-        Self {
-            core: AsyncClientCore::with_http_client(None, http),
-        }
+        Self::from_core(AsyncClientCore::with_http_client(None, http))
     }
 
     /// Creates an async client without an API key and with proxy support.
     ///
     /// Company/facility hierarchy rows are typically unavailable in this mode.
     pub fn with_proxy_without_api_key(proxy_url: impl AsRef<str>) -> Result<Self, GieError> {
-        Ok(Self {
-            core: AsyncClientCore::with_proxy(None, proxy_url)?,
-        })
+        AsyncClientCore::with_proxy(None, proxy_url).map(Self::from_core)
     }
 
     /// Overrides the `User-Agent` header used for API requests.
     pub fn with_user_agent(self, user_agent: impl Into<String>) -> Self {
-        let core = self.core.with_user_agent(user_agent);
-        Self { core }
+        self.map_core(|core| core.with_user_agent(user_agent))
     }
 
     /// Disables sending the `User-Agent` header.
     pub fn without_user_agent(self) -> Self {
-        let core = self.core.without_user_agent();
-        Self { core }
+        self.map_core(AsyncClientCore::without_user_agent)
     }
 
     /// Enables or disables debug logging of outgoing requests.
     pub fn with_debug_requests(self, enabled: bool) -> Self {
-        let core = self.core.with_debug_requests(enabled);
-        Self { core }
+        self.map_core(|core| core.with_debug_requests(enabled))
     }
 
     /// Sets per-process request limit (requests per minute).
     pub fn with_rate_limit(self, requests_per_minute: NonZeroU32) -> Self {
-        let core = self.core.with_rate_limit(requests_per_minute);
-        Self { core }
+        self.map_core(|core| core.with_rate_limit(requests_per_minute))
     }
 
     /// Disables built-in per-process rate limiting.
     pub fn without_rate_limit(self) -> Self {
-        let core = self.core.without_rate_limit();
-        Self { core }
+        self.map_core(AsyncClientCore::without_rate_limit)
     }
 
     /// Fetches a single page of AGSI records.
@@ -334,10 +322,7 @@ where
     let rows = rows.into_iter();
     let (capacity, _) = rows.size_hint();
 
-    let mut name = Vec::with_capacity(capacity);
-    let mut code = Vec::with_capacity(capacity);
-    let mut url = Vec::with_capacity(capacity);
-    let mut gas_day_start = Vec::with_capacity(capacity);
+    let mut common = CommonFrameColumns::with_capacity(capacity);
     let mut gas_in_storage = Vec::with_capacity(capacity);
     let mut consumption = Vec::with_capacity(capacity);
     let mut consumption_full = Vec::with_capacity(capacity);
@@ -350,14 +335,16 @@ where
     let mut status = Vec::with_capacity(capacity);
     let mut trend = Vec::with_capacity(capacity);
     let mut full = Vec::with_capacity(capacity);
-    let mut info_json = Vec::with_capacity(capacity);
-    let mut children_json = Vec::with_capacity(capacity);
 
     for row in rows {
-        name.push(row.name.clone());
-        code.push(row.code.clone());
-        url.push(row.url.clone());
-        gas_day_start.push(row.gas_day_start.map(format_date));
+        common.push(
+            &row.name,
+            &row.code,
+            &row.url,
+            row.gas_day_start,
+            row.info.as_deref(),
+            row.children.as_deref(),
+        )?;
         gas_in_storage.push(row.gas_in_storage);
         consumption.push(row.consumption);
         consumption_full.push(row.consumption_full);
@@ -370,34 +357,27 @@ where
         status.push(row.status.clone());
         trend.push(row.trend);
         full.push(row.full);
-        info_json.push(json_vec_to_string(row.info.as_deref())?);
-        children_json.push(json_vec_to_string(row.children.as_deref())?);
     }
 
-    DataFrame::new(
-        name.len(),
-        vec![
-            Series::new("name".into(), name).into(),
-            Series::new("code".into(), code).into(),
-            Series::new("url".into(), url).into(),
-            Series::new("gas_day_start".into(), gas_day_start).into(),
-            Series::new("gas_in_storage".into(), gas_in_storage).into(),
-            Series::new("consumption".into(), consumption).into(),
-            Series::new("consumption_full".into(), consumption_full).into(),
-            Series::new("injection".into(), injection).into(),
-            Series::new("net_withdrawal".into(), net_withdrawal).into(),
-            Series::new("withdrawal".into(), withdrawal).into(),
-            Series::new("working_gas_volume".into(), working_gas_volume).into(),
-            Series::new("injection_capacity".into(), injection_capacity).into(),
-            Series::new("withdrawal_capacity".into(), withdrawal_capacity).into(),
-            Series::new("status".into(), status).into(),
-            Series::new("trend".into(), trend).into(),
-            Series::new("full".into(), full).into(),
-            Series::new("info_json".into(), info_json).into(),
-            Series::new("children_json".into(), children_json).into(),
-        ],
-    )
-    .map_err(Into::into)
+    let height = common.height();
+    let (mut columns, tail_columns) = common.into_polars_columns();
+    columns.extend([
+        Series::new("gas_in_storage".into(), gas_in_storage).into(),
+        Series::new("consumption".into(), consumption).into(),
+        Series::new("consumption_full".into(), consumption_full).into(),
+        Series::new("injection".into(), injection).into(),
+        Series::new("net_withdrawal".into(), net_withdrawal).into(),
+        Series::new("withdrawal".into(), withdrawal).into(),
+        Series::new("working_gas_volume".into(), working_gas_volume).into(),
+        Series::new("injection_capacity".into(), injection_capacity).into(),
+        Series::new("withdrawal_capacity".into(), withdrawal_capacity).into(),
+        Series::new("status".into(), status).into(),
+        Series::new("trend".into(), trend).into(),
+        Series::new("full".into(), full).into(),
+    ]);
+    columns.extend(tail_columns);
+
+    DataFrame::new(height, columns).map_err(Into::into)
 }
 
 /// Raw AGSI record as returned by the API.

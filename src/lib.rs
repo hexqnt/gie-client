@@ -23,6 +23,8 @@ pub use common::GieDate;
 pub use common::GiePage;
 /// Shared query builder used by both AGSI and ALSI clients.
 pub use common::GieQuery;
+/// Validated non-empty text filter used by `GieQuery`.
+pub use common::QueryText;
 /// Entity level returned by record `type` field.
 pub use common::RecordType;
 /// Error type returned by all client operations.

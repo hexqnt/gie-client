@@ -47,14 +47,7 @@ where
 
     match value {
         None => Ok(None),
-        Some(string) => {
-            let trimmed = string.trim();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(parse_dataset_name(trimmed)))
-            }
-        }
+        Some(string) => Ok(non_empty_trimmed(&string).map(parse_dataset_name)),
     }
 }
 
@@ -78,10 +71,9 @@ where
     match value {
         None => Ok(None),
         Some(string) => {
-            let trimmed = string.trim();
-            if trimmed.is_empty() {
+            let Some(trimmed) = non_empty_trimmed(&string) else {
                 return Ok(None);
-            }
+            };
 
             parse_date(trimmed)
                 .map(Some)
@@ -191,17 +183,29 @@ where
 
     match value {
         None => Ok(None),
-        Some(OptionalStringInput::String(string)) => {
-            let trimmed = string.trim();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(string))
-            }
-        }
+        Some(OptionalStringInput::String(string)) => Ok(normalize_optional_text(string)),
         Some(OptionalStringInput::Number(number)) => Ok(Some(number.to_string())),
         Some(OptionalStringInput::Bool(flag)) => Ok(Some(flag.to_string())),
     }
+}
+
+fn non_empty_trimmed(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed)
+}
+
+fn normalize_optional_text(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.len() == value.len() {
+        return Some(value);
+    }
+    Some(trimmed.to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -289,6 +293,7 @@ mod tests {
         let as_storage: DatasetNameProbe = serde_json::from_str(r#"{"value": "storage"}"#).unwrap();
         let as_unknown: DatasetNameProbe =
             serde_json::from_str(r#"{"value": "storage ERROR"}"#).unwrap();
+        let as_trimmed: DatasetNameProbe = serde_json::from_str(r#"{"value": " LNG "}"#).unwrap();
         let as_blank: DatasetNameProbe = serde_json::from_str(r#"{"value": ""}"#).unwrap();
         let as_null: DatasetNameProbe = serde_json::from_str(r#"{"value": null}"#).unwrap();
 
@@ -297,6 +302,7 @@ mod tests {
             as_unknown.value,
             Some(DatasetName::Unknown("storage ERROR".to_string()))
         );
+        assert_eq!(as_trimmed.value, Some(DatasetName::Lng));
         assert_eq!(as_blank.value, None);
         assert_eq!(as_null.value, None);
     }
@@ -304,10 +310,12 @@ mod tests {
     #[test]
     fn date_deserializer_accepts_ymd_or_empty() {
         let as_string: DateProbe = serde_json::from_str(r#"{"value": "2026-03-10"}"#).unwrap();
+        let as_trimmed: DateProbe = serde_json::from_str(r#"{"value": " 2026-03-10 "}"#).unwrap();
         let as_empty: DateProbe = serde_json::from_str(r#"{"value": ""}"#).unwrap();
         let as_null: DateProbe = serde_json::from_str(r#"{"value": null}"#).unwrap();
 
         assert_eq!(as_string.value, Some(test_date("2026-03-10")));
+        assert_eq!(as_trimmed.value, Some(test_date("2026-03-10")));
         assert_eq!(as_empty.value, None);
         assert_eq!(as_null.value, None);
     }
@@ -358,11 +366,13 @@ mod tests {
     #[test]
     fn string_deserializer_accepts_number_bool_and_string() {
         let as_string: StringProbe = serde_json::from_str(r#"{"value": "ok"}"#).unwrap();
+        let as_trimmed: StringProbe = serde_json::from_str(r#"{"value": "  ok  "}"#).unwrap();
         let as_number: StringProbe = serde_json::from_str(r#"{"value": 42}"#).unwrap();
         let as_bool: StringProbe = serde_json::from_str(r#"{"value": true}"#).unwrap();
         let as_empty: StringProbe = serde_json::from_str(r#"{"value": ""}"#).unwrap();
 
         assert_eq!(as_string.value.as_deref(), Some("ok"));
+        assert_eq!(as_trimmed.value.as_deref(), Some("ok"));
         assert_eq!(as_number.value.as_deref(), Some("42"));
         assert_eq!(as_bool.value.as_deref(), Some("true"));
         assert_eq!(as_empty.value, None);

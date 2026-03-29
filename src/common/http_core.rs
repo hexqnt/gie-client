@@ -190,10 +190,10 @@ where
     }
 
     let mut request = client.get(url).query(&query_params);
-    if let Some(user_agent) = normalized_user_agent(context.user_agent) {
+    if let Some(user_agent) = context.user_agent {
         request = request.header(USER_AGENT, user_agent);
     }
-    if let Some(api_key) = normalized_api_key(context.api_key) {
+    if let Some(api_key) = context.api_key {
         request = request.header("x-key", api_key);
     }
 
@@ -249,10 +249,10 @@ where
     }
 
     let mut request = client.get(url).query(&query_params);
-    if let Some(user_agent) = normalized_user_agent(context.user_agent) {
+    if let Some(user_agent) = context.user_agent {
         request = request.header(USER_AGENT, user_agent);
     }
-    if let Some(api_key) = normalized_api_key(context.api_key) {
+    if let Some(api_key) = context.api_key {
         request = request.header("x-key", api_key);
     }
 
@@ -333,12 +333,7 @@ where
     }
 
     while last_page != 0 && next_page.get() < last_page {
-        let raw_next_page = next_page.get().checked_add(1).ok_or_else(|| {
-            GieError::InvalidPageInput("page number overflow while fetching pages".to_string())
-        })?;
-        next_page = NonZeroU32::new(raw_next_page).ok_or_else(|| {
-            GieError::InvalidPageInput("page number overflow while fetching pages".to_string())
-        })?;
+        next_page = next_page_number(next_page)?;
 
         let response = fetch_page(next_page)?;
         last_page = response.last_page;
@@ -369,12 +364,7 @@ where
     }
 
     while last_page != 0 && next_page.get() < last_page {
-        let raw_next_page = next_page.get().checked_add(1).ok_or_else(|| {
-            GieError::InvalidPageInput("page number overflow while fetching pages".to_string())
-        })?;
-        next_page = NonZeroU32::new(raw_next_page).ok_or_else(|| {
-            GieError::InvalidPageInput("page number overflow while fetching pages".to_string())
-        })?;
+        next_page = next_page_number(next_page)?;
 
         let response = fetch_page(next_page).await?;
         last_page = response.last_page;
@@ -384,23 +374,16 @@ where
     Ok(all_rows)
 }
 
-fn normalized_api_key(api_key: Option<&str>) -> Option<&str> {
-    normalized_header_value(api_key)
+fn next_page_number(current: NonZeroU32) -> Result<NonZeroU32, GieError> {
+    let next = current
+        .get()
+        .checked_add(1)
+        .ok_or_else(page_overflow_error)?;
+    NonZeroU32::new(next).ok_or_else(page_overflow_error)
 }
 
-fn normalized_user_agent(user_agent: Option<&str>) -> Option<&str> {
-    normalized_header_value(user_agent)
-}
-
-fn normalized_header_value(value: Option<&str>) -> Option<&str> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    })
+fn page_overflow_error() -> GieError {
+    GieError::InvalidPageInput("page number overflow while fetching pages".to_string())
 }
 
 fn log_debug_request(
@@ -414,25 +397,17 @@ fn log_debug_request(
         Ok(mut parsed_url) => {
             {
                 let mut url_query = parsed_url.query_pairs_mut();
-                for (key, value) in query.to_debug_pairs(page_override) {
-                    url_query.append_pair(key, &value);
-                }
+                query.visit_debug_pairs(page_override, |key, value| {
+                    url_query.append_pair(key, value);
+                });
             }
             parsed_url.to_string()
         }
         Err(_) => url.to_string(),
     };
 
-    let x_key_state = if normalized_api_key(api_key).is_some() {
-        "set"
-    } else {
-        "none"
-    };
-    let ua_state = if normalized_user_agent(user_agent).is_some() {
-        "set"
-    } else {
-        "none"
-    };
+    let x_key_state = if api_key.is_some() { "set" } else { "none" };
+    let ua_state = if user_agent.is_some() { "set" } else { "none" };
     eprintln!("GIE debug request: GET {full_url} (x-key: {x_key_state}, user-agent: {ua_state})");
 }
 
@@ -481,22 +456,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_or_missing_api_key_is_treated_as_absent() {
-        assert_eq!(normalized_api_key(None), None);
-        assert_eq!(normalized_api_key(Some("")), None);
-        assert_eq!(normalized_api_key(Some("   ")), None);
-        assert_eq!(normalized_api_key(Some(" key ")), Some("key"));
-    }
-
-    #[test]
-    fn empty_or_missing_user_agent_is_treated_as_absent() {
-        assert_eq!(normalized_user_agent(None), None);
-        assert_eq!(normalized_user_agent(Some("")), None);
-        assert_eq!(normalized_user_agent(Some("   ")), None);
-        assert_eq!(normalized_user_agent(Some(" browser ")), Some("browser"));
-    }
-
-    #[test]
     fn proxy_builders_accept_valid_proxy_url() {
         assert!(build_blocking_client_with_proxy("http://127.0.0.1:8080").is_ok());
         assert!(build_async_client_with_proxy("http://127.0.0.1:8080").is_ok());
@@ -506,5 +465,17 @@ mod tests {
     fn proxy_builders_reject_invalid_proxy_url() {
         assert!(build_blocking_client_with_proxy("http://[::1").is_err());
         assert!(build_async_client_with_proxy("http://[::1").is_err());
+    }
+
+    #[test]
+    fn page_number_increment_handles_overflow() {
+        let one = NonZeroU32::new(1).unwrap();
+        assert_eq!(next_page_number(one).unwrap().get(), 2);
+
+        let max_page = NonZeroU32::new(u32::MAX).unwrap();
+        assert!(matches!(
+            next_page_number(max_page),
+            Err(GieError::InvalidPageInput(_))
+        ));
     }
 }
