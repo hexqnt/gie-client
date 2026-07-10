@@ -1,14 +1,5 @@
 //! Rust client for GIE transparency APIs (AGSI and ALSI).
 
-/// AGSI clients and data models.
-pub mod agsi;
-/// ALSI clients and data models.
-pub mod alsi;
-
-mod client_core;
-mod common;
-mod error;
-
 /// Dataset name returned in API response envelope.
 pub use common::DatasetName;
 /// Dataset type accepted by the `type` query parameter.
@@ -29,3 +20,12 @@ pub use common::QueryText;
 pub use common::RecordType;
 /// Error type returned by all client operations.
 pub use error::GieError;
+
+/// AGSI clients and data models.
+pub mod agsi;
+/// ALSI clients and data models.
+pub mod alsi;
+
+mod client_core;
+mod common;
+mod error;

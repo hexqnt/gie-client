@@ -11,6 +11,22 @@ use super::types::{
     parse_record_type,
 };
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum OptionalF64Input {
+    Number(f64),
+    String(String),
+    Object(serde_json::Map<String, Value>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum OptionalStringInput {
+    String(String),
+    Number(serde_json::Number),
+    Bool(bool),
+}
+
 pub(crate) fn serialize_optional_date<S>(
     value: &Option<GieDate>,
     serializer: S,
@@ -96,14 +112,6 @@ where
         Some(OptionalF64Input::Object(object)) => parse_optional_f64_from_object(&object)
             .map_err(|message| de::Error::custom(format!("{message}, got {object:?}"))),
     }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum OptionalF64Input {
-    Number(f64),
-    String(String),
-    Object(serde_json::Map<String, Value>),
 }
 
 fn parse_optional_f64_string(value: &str) -> Result<Option<f64>, String> {
@@ -206,14 +214,6 @@ fn normalize_optional_text(value: String) -> Option<String> {
         return Some(value);
     }
     Some(trimmed.to_string())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum OptionalStringInput {
-    String(String),
-    Number(serde_json::Number),
-    Bool(bool),
 }
 
 #[cfg(feature = "polars")]

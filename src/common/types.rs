@@ -122,6 +122,22 @@ pub struct GiePage<T> {
     pub data: Vec<T>,
 }
 
+#[cfg(not(feature = "chrono"))]
+struct YmdDate(Date);
+
+#[cfg(not(feature = "chrono"))]
+impl fmt::Display for YmdDate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:04}-{:02}-{:02}",
+            self.0.year(),
+            u8::from(self.0.month()),
+            self.0.day()
+        )
+    }
+}
+
 pub(crate) fn format_date(date: GieDate) -> String {
     #[cfg(feature = "chrono")]
     {
@@ -223,22 +239,6 @@ fn parse_day_component(value: &str) -> Result<u8, String> {
     value
         .parse::<u8>()
         .map_err(|error| format!("invalid day component: {error}"))
-}
-
-#[cfg(not(feature = "chrono"))]
-struct YmdDate(Date);
-
-#[cfg(not(feature = "chrono"))]
-impl fmt::Display for YmdDate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:04}-{:02}-{:02}",
-            self.0.year(),
-            u8::from(self.0.month()),
-            self.0.day()
-        )
-    }
 }
 
 #[cfg(test)]

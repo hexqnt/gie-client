@@ -42,12 +42,6 @@ pub(crate) struct RateLimiter {
     state: Mutex<RateLimiterState>,
 }
 
-#[derive(Debug, Default)]
-struct RateLimiterState {
-    recent_requests: VecDeque<Instant>,
-    blocked_until: Option<Instant>,
-}
-
 impl RateLimiter {
     pub(crate) fn new(config: RateLimitConfig) -> Self {
         Self {
@@ -126,9 +120,10 @@ impl RateLimiter {
     }
 }
 
-fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
-    let value = headers.get(RETRY_AFTER)?.to_str().ok()?;
-    value.trim().parse::<u64>().ok().map(Duration::from_secs)
+#[derive(Debug, Default)]
+struct RateLimiterState {
+    recent_requests: VecDeque<Instant>,
+    blocked_until: Option<Instant>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -162,6 +157,11 @@ impl<T> From<GieEnvelope<T>> for GiePage<T> {
             data: value.data,
         }
     }
+}
+
+fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    let value = headers.get(RETRY_AFTER)?.to_str().ok()?;
+    value.trim().parse::<u64>().ok().map(Duration::from_secs)
 }
 
 pub(crate) fn fetch_page<T>(
@@ -223,49 +223,6 @@ pub(crate) fn build_async_client_with_proxy(proxy_url: &str) -> Result<reqwest::
         .map_err(Into::into)
 }
 
-pub(crate) async fn fetch_page_async<T>(
-    client: &reqwest::Client,
-    url: &str,
-    context: RequestContext<'_>,
-    query: &GieQuery,
-    page_override: Option<NonZeroU32>,
-) -> Result<GiePage<T>, GieError>
-where
-    T: DeserializeOwned,
-{
-    let query_params = query.as_params_with_page(page_override);
-    if context.debug_requests {
-        log_debug_request(
-            url,
-            context.api_key,
-            context.user_agent,
-            query,
-            page_override,
-        );
-    }
-
-    if let Some(rate_limiter) = context.rate_limiter {
-        rate_limiter.wait_turn_async().await;
-    }
-
-    let mut request = client.get(url).query(&query_params);
-    if let Some(user_agent) = context.user_agent {
-        request = request.header(USER_AGENT, user_agent);
-    }
-    if let Some(api_key) = context.api_key {
-        request = request.header("x-key", api_key);
-    }
-
-    let response = request.send().await?;
-    if response.status() == StatusCode::TOO_MANY_REQUESTS
-        && let Some(rate_limiter) = context.rate_limiter
-    {
-        rate_limiter.on_too_many_requests(parse_retry_after(response.headers()));
-    }
-
-    decode_page_response_async(response).await
-}
-
 fn decode_page_response<T>(response: reqwest::blocking::Response) -> Result<GiePage<T>, GieError>
 where
     T: DeserializeOwned,
@@ -279,23 +236,6 @@ where
     }
 
     let body = response.bytes()?;
-    let envelope: GieEnvelope<T> = serde_json::from_slice(&body)?;
-    decode_envelope(envelope)
-}
-
-async fn decode_page_response_async<T>(response: reqwest::Response) -> Result<GiePage<T>, GieError>
-where
-    T: DeserializeOwned,
-{
-    let status = response.status();
-    if !status.is_success() {
-        return Err(GieError::HttpStatus {
-            status,
-            body: response.text().await?,
-        });
-    }
-
-    let body = response.bytes().await?;
     let envelope: GieEnvelope<T> = serde_json::from_slice(&body)?;
     decode_envelope(envelope)
 }
@@ -343,37 +283,6 @@ where
     Ok(all_rows)
 }
 
-pub(crate) async fn fetch_all_pages_async<T, F, Fut>(
-    start_page: NonZeroU32,
-    mut fetch_page: F,
-) -> Result<Vec<T>, GieError>
-where
-    F: FnMut(NonZeroU32) -> Fut,
-    Fut: Future<Output = Result<GiePage<T>, GieError>>,
-{
-    let mut next_page = start_page;
-    let first_page = fetch_page(next_page).await?;
-    let mut all_rows = first_page.data;
-    let mut last_page = first_page.last_page;
-
-    if let Some(extra_capacity) = usize::try_from(first_page.total)
-        .ok()
-        .and_then(|total| total.checked_sub(all_rows.len()))
-    {
-        all_rows.reserve(extra_capacity);
-    }
-
-    while last_page != 0 && next_page.get() < last_page {
-        next_page = next_page_number(next_page)?;
-
-        let response = fetch_page(next_page).await?;
-        last_page = response.last_page;
-        all_rows.extend(response.data);
-    }
-
-    Ok(all_rows)
-}
-
 fn next_page_number(current: NonZeroU32) -> Result<NonZeroU32, GieError> {
     let next = current
         .get()
@@ -409,6 +318,97 @@ fn log_debug_request(
     let x_key_state = if api_key.is_some() { "set" } else { "none" };
     let ua_state = if user_agent.is_some() { "set" } else { "none" };
     eprintln!("GIE debug request: GET {full_url} (x-key: {x_key_state}, user-agent: {ua_state})");
+}
+
+pub(crate) async fn fetch_page_async<T>(
+    client: &reqwest::Client,
+    url: &str,
+    context: RequestContext<'_>,
+    query: &GieQuery,
+    page_override: Option<NonZeroU32>,
+) -> Result<GiePage<T>, GieError>
+where
+    T: DeserializeOwned,
+{
+    let query_params = query.as_params_with_page(page_override);
+    if context.debug_requests {
+        log_debug_request(
+            url,
+            context.api_key,
+            context.user_agent,
+            query,
+            page_override,
+        );
+    }
+
+    if let Some(rate_limiter) = context.rate_limiter {
+        rate_limiter.wait_turn_async().await;
+    }
+
+    let mut request = client.get(url).query(&query_params);
+    if let Some(user_agent) = context.user_agent {
+        request = request.header(USER_AGENT, user_agent);
+    }
+    if let Some(api_key) = context.api_key {
+        request = request.header("x-key", api_key);
+    }
+
+    let response = request.send().await?;
+    if response.status() == StatusCode::TOO_MANY_REQUESTS
+        && let Some(rate_limiter) = context.rate_limiter
+    {
+        rate_limiter.on_too_many_requests(parse_retry_after(response.headers()));
+    }
+
+    decode_page_response_async(response).await
+}
+
+async fn decode_page_response_async<T>(response: reqwest::Response) -> Result<GiePage<T>, GieError>
+where
+    T: DeserializeOwned,
+{
+    let status = response.status();
+    if !status.is_success() {
+        return Err(GieError::HttpStatus {
+            status,
+            body: response.text().await?,
+        });
+    }
+
+    let body = response.bytes().await?;
+    let envelope: GieEnvelope<T> = serde_json::from_slice(&body)?;
+    decode_envelope(envelope)
+}
+
+pub(crate) async fn fetch_all_pages_async<T, F, Fut>(
+    start_page: NonZeroU32,
+    mut fetch_page: F,
+) -> Result<Vec<T>, GieError>
+where
+    F: FnMut(NonZeroU32) -> Fut,
+    Fut: Future<Output = Result<GiePage<T>, GieError>>,
+{
+    let mut next_page = start_page;
+    let first_page = fetch_page(next_page).await?;
+    let mut all_rows = first_page.data;
+    let mut last_page = first_page.last_page;
+
+    if let Some(extra_capacity) = usize::try_from(first_page.total)
+        .ok()
+        .and_then(|total| total.checked_sub(all_rows.len()))
+    {
+        all_rows.reserve(extra_capacity);
+    }
+
+    while last_page != 0 && next_page.get() < last_page {
+        next_page = next_page_number(next_page)?;
+
+        let response = fetch_page(next_page).await?;
+        last_page = response.last_page;
+        all_rows.extend(response.data);
+    }
+
+    Ok(all_rows)
 }
 
 #[cfg(test)]

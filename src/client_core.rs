@@ -13,12 +13,6 @@ use crate::common::{
 };
 use crate::error::GieError;
 
-pub(crate) trait Endpoint {
-    type Record: DeserializeOwned;
-
-    const URL: &'static str;
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct BlockingClientCore {
     pub(crate) http: reqwest::blocking::Client,
@@ -220,6 +214,12 @@ impl AsyncClientCore {
         })
         .await
     }
+}
+
+pub(crate) trait Endpoint {
+    type Record: DeserializeOwned;
+
+    const URL: &'static str;
 }
 
 #[cfg(test)]

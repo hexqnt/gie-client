@@ -263,23 +263,6 @@ impl GieQuery {
     }
 }
 
-fn default_page() -> NonZeroU32 {
-    NonZeroU32::new(1).expect("1 is non-zero")
-}
-
-fn parse_required_text_filter(field_name: &str, value: String) -> Result<QueryText, GieError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(GieError::InvalidTextFilterInput(format!(
-            "{field_name} must not be blank"
-        )));
-    }
-    if trimmed.len() == value.len() {
-        return Ok(QueryText(value));
-    }
-    Ok(QueryText(trimmed.to_string()))
-}
-
 #[derive(Debug, Serialize)]
 pub(crate) struct GieQueryParams<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -313,6 +296,23 @@ pub(crate) struct GieQueryParams<'a> {
     page: Option<NonZeroU32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<NonZeroU32>,
+}
+
+fn default_page() -> NonZeroU32 {
+    NonZeroU32::new(1).expect("1 is non-zero")
+}
+
+fn parse_required_text_filter(field_name: &str, value: String) -> Result<QueryText, GieError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(GieError::InvalidTextFilterInput(format!(
+            "{field_name} must not be blank"
+        )));
+    }
+    if trimmed.len() == value.len() {
+        return Ok(QueryText(value));
+    }
+    Ok(QueryText(trimmed.to_string()))
 }
 
 #[cfg(test)]

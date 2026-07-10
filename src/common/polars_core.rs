@@ -1,12 +1,12 @@
 use serde_json::Value;
 
+#[cfg(feature = "polars")]
+use polars::prelude::{Column, NamedFrom, Series};
+
 use crate::error::GieError;
 
 use super::serde_ext::json_vec_to_string;
 use super::types::{GieDate, format_date};
-
-#[cfg(feature = "polars")]
-use polars::prelude::{Column, NamedFrom, Series};
 
 #[cfg(feature = "polars")]
 /// Shared builder for columns present in both AGSI and ALSI dataframe conversions.

@@ -4,6 +4,9 @@ use std::num::NonZeroU32;
 
 use serde::Deserialize;
 
+#[cfg(feature = "polars")]
+use polars::prelude::{DataFrame, NamedFrom, Series};
+
 use crate::client_core::{AsyncClientCore, BlockingClientCore, Endpoint};
 #[cfg(feature = "polars")]
 use crate::common::polars_core::CommonFrameColumns;
@@ -15,8 +18,6 @@ use crate::common::{
     time_series::group_time_series,
 };
 use crate::error::GieError;
-#[cfg(feature = "polars")]
-use polars::prelude::{DataFrame, NamedFrom, Series};
 
 const ALSI_API_URL: &str = "https://alsi.gie.eu/api";
 
@@ -290,6 +291,54 @@ pub struct AlsiTimeSeries {
     pub points: Vec<AlsiRecord>,
 }
 
+/// Raw ALSI record as returned by the API.
+///
+/// When no API key is provided, ALSI usually returns aggregate/country rows only.
+/// Company/facility hierarchy rows require `GIE_API_KEY`.
+/// In practice, this mostly affects:
+/// - `record_type` (`company`/`facility` levels);
+/// - `code`/`url`/`name` values for company and facility entities.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AlsiRecord {
+    pub name: Option<String>,
+    pub code: Option<String>,
+    #[serde(
+        rename = "type",
+        default,
+        deserialize_with = "deserialize_optional_record_type"
+    )]
+    pub record_type: Option<RecordType>,
+    pub url: Option<String>,
+    #[serde(
+        rename = "gasDayStart",
+        default,
+        deserialize_with = "deserialize_optional_date"
+    )]
+    pub gas_day_start: Option<GieDate>,
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
+    pub inventory: Option<f64>,
+    #[serde(
+        rename = "sendOut",
+        default,
+        deserialize_with = "deserialize_optional_f64"
+    )]
+    pub send_out: Option<f64>,
+    #[serde(
+        rename = "dtmi",
+        default,
+        deserialize_with = "deserialize_optional_f64"
+    )]
+    pub dtmi: Option<f64>,
+    #[serde(
+        rename = "dtrs",
+        default,
+        deserialize_with = "deserialize_optional_f64"
+    )]
+    pub dtrs: Option<f64>,
+    pub info: Option<Vec<serde_json::Value>>,
+    pub children: Option<Vec<serde_json::Value>>,
+}
+
 fn build_time_series(rows: Vec<AlsiRecord>) -> Vec<AlsiTimeSeries> {
     group_time_series(
         rows,
@@ -353,54 +402,6 @@ where
     columns.extend(tail_columns);
 
     DataFrame::new(height, columns).map_err(Into::into)
-}
-
-/// Raw ALSI record as returned by the API.
-///
-/// When no API key is provided, ALSI usually returns aggregate/country rows only.
-/// Company/facility hierarchy rows require `GIE_API_KEY`.
-/// In practice, this mostly affects:
-/// - `record_type` (`company`/`facility` levels);
-/// - `code`/`url`/`name` values for company and facility entities.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct AlsiRecord {
-    pub name: Option<String>,
-    pub code: Option<String>,
-    #[serde(
-        rename = "type",
-        default,
-        deserialize_with = "deserialize_optional_record_type"
-    )]
-    pub record_type: Option<RecordType>,
-    pub url: Option<String>,
-    #[serde(
-        rename = "gasDayStart",
-        default,
-        deserialize_with = "deserialize_optional_date"
-    )]
-    pub gas_day_start: Option<GieDate>,
-    #[serde(default, deserialize_with = "deserialize_optional_f64")]
-    pub inventory: Option<f64>,
-    #[serde(
-        rename = "sendOut",
-        default,
-        deserialize_with = "deserialize_optional_f64"
-    )]
-    pub send_out: Option<f64>,
-    #[serde(
-        rename = "dtmi",
-        default,
-        deserialize_with = "deserialize_optional_f64"
-    )]
-    pub dtmi: Option<f64>,
-    #[serde(
-        rename = "dtrs",
-        default,
-        deserialize_with = "deserialize_optional_f64"
-    )]
-    pub dtrs: Option<f64>,
-    pub info: Option<Vec<serde_json::Value>>,
-    pub children: Option<Vec<serde_json::Value>>,
 }
 
 #[cfg(test)]
