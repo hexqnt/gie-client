@@ -1,5 +1,6 @@
 //! AGSI clients and record models.
 
+use std::cmp::Ordering;
 use std::num::NonZeroU32;
 
 use serde::Deserialize;
@@ -371,7 +372,8 @@ pub struct AgsiRecord {
 fn build_time_series(rows: Vec<AgsiRecord>) -> Vec<AgsiTimeSeries> {
     group_time_series(
         rows,
-        |record: &AgsiRecord| AgsiSeriesKey::from(record),
+        compare_series_identity,
+        |record| AgsiSeriesKey::from(record),
         |record| record.gas_day_start,
     )
     .into_iter()
@@ -379,26 +381,34 @@ fn build_time_series(rows: Vec<AgsiRecord>) -> Vec<AgsiTimeSeries> {
     .collect()
 }
 
+fn compare_series_identity(left: &AgsiRecord, right: &AgsiRecord) -> Ordering {
+    left.code
+        .cmp(&right.code)
+        .then_with(|| left.name.cmp(&right.name))
+        .then_with(|| left.url.cmp(&right.url))
+}
+
 #[cfg(feature = "polars")]
 /// Converts a flat AGSI record slice into a `polars::DataFrame`.
 pub fn records_to_dataframe(rows: &[AgsiRecord]) -> Result<DataFrame, GieError> {
-    records_to_dataframe_from_iter(rows.iter())
+    records_to_dataframe_from_iter(rows.iter(), rows.len())
 }
 
 #[cfg(feature = "polars")]
 /// Converts AGSI time series into a flat `polars::DataFrame`.
 pub fn time_series_to_dataframe(series: &[AgsiTimeSeries]) -> Result<DataFrame, GieError> {
-    records_to_dataframe_from_iter(series.iter().flat_map(|entry| entry.points.iter()))
+    let capacity = series.iter().map(|entry| entry.points.len()).sum();
+    records_to_dataframe_from_iter(
+        series.iter().flat_map(|entry| entry.points.iter()),
+        capacity,
+    )
 }
 
 #[cfg(feature = "polars")]
-fn records_to_dataframe_from_iter<'a, I>(rows: I) -> Result<DataFrame, GieError>
+fn records_to_dataframe_from_iter<'a, I>(rows: I, capacity: usize) -> Result<DataFrame, GieError>
 where
     I: IntoIterator<Item = &'a AgsiRecord>,
 {
-    let rows = rows.into_iter();
-    let (capacity, _) = rows.size_hint();
-
     let mut common = CommonFrameColumns::with_capacity(capacity);
     let mut gas_in_storage = Vec::with_capacity(capacity);
     let mut consumption = Vec::with_capacity(capacity);

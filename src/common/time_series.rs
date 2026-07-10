@@ -4,49 +4,32 @@ use std::collections::BTreeMap;
 
 use super::types::GieDate;
 
-pub(crate) fn group_time_series<T, K, FK, FD>(
-    rows: Vec<T>,
+pub(crate) fn group_time_series<T, K, FC, FK, FD>(
+    mut rows: Vec<T>,
+    compare_keys: FC,
     make_key: FK,
     gas_day_start: FD,
 ) -> Vec<(K, Vec<T>)>
 where
-    K: Ord,
+    FC: Fn(&T, &T) -> Ordering,
     FK: Fn(&T) -> K,
     FD: Fn(&T) -> Option<GieDate>,
 {
-    group_time_series_presorted(rows, make_key, gas_day_start)
-}
-
-fn group_time_series_presorted<T, K, FK, FD>(
-    rows: Vec<T>,
-    make_key: FK,
-    gas_day_start: FD,
-) -> Vec<(K, Vec<T>)>
-where
-    K: Ord,
-    FK: Fn(&T) -> K,
-    FD: Fn(&T) -> Option<GieDate>,
-{
-    let mut keyed_rows: Vec<(K, Option<GieDate>, T)> = rows
-        .into_iter()
-        .map(|row| (make_key(&row), gas_day_start(&row), row))
-        .collect();
-
-    keyed_rows.sort_by(|(left_key, left_day, _), (right_key, right_day, _)| {
-        left_key
-            .cmp(right_key)
-            .then_with(|| compare_optional_dates(*left_day, *right_day))
+    rows.sort_by(|left, right| {
+        compare_keys(left, right)
+            .then_with(|| compare_optional_dates(gas_day_start(left), gas_day_start(right)))
     });
 
     let mut grouped: Vec<(K, Vec<T>)> = Vec::new();
-    for (key, _, row) in keyed_rows {
-        if let Some((last_key, points)) = grouped.last_mut()
-            && last_key == &key
+    for row in rows {
+        if let Some((_, points)) = grouped.last_mut()
+            && let Some(last_row) = points.last()
+            && compare_keys(last_row, &row).is_eq()
         {
             points.push(row);
             continue;
         }
-        grouped.push((key, vec![row]));
+        grouped.push((make_key(&row), vec![row]));
     }
 
     grouped
@@ -130,7 +113,12 @@ mod tests {
             },
         ];
 
-        let grouped = group_time_series(rows, |row| row.key, |row| row.gas_day_start);
+        let grouped = group_time_series(
+            rows,
+            |left, right| left.key.cmp(right.key),
+            |row| row.key,
+            |row| row.gas_day_start,
+        );
 
         assert_eq!(grouped.len(), 2);
         assert_eq!(
@@ -180,7 +168,12 @@ mod tests {
             },
         ];
 
-        let presorted = group_time_series(rows.clone(), |row| row.key, |row| row.gas_day_start);
+        let presorted = group_time_series(
+            rows.clone(),
+            |left, right| left.key.cmp(right.key),
+            |row| row.key,
+            |row| row.gas_day_start,
+        );
         let btree = group_time_series_btree(rows, |row| row.key, |row| row.gas_day_start);
 
         assert_eq!(presorted, btree);
@@ -209,7 +202,12 @@ mod tests {
         }
 
         let started = Instant::now();
-        let _ = group_time_series(rows.clone(), |row| row.key, |row| row.gas_day_start);
+        let _ = group_time_series(
+            rows.clone(),
+            |left, right| left.key.cmp(&right.key),
+            |row| row.key,
+            |row| row.gas_day_start,
+        );
         let presorted_elapsed = started.elapsed();
 
         let started = Instant::now();

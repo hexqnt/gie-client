@@ -1,5 +1,6 @@
 //! ALSI clients and record models.
 
+use std::cmp::Ordering;
 use std::num::NonZeroU32;
 
 use serde::Deserialize;
@@ -342,7 +343,8 @@ pub struct AlsiRecord {
 fn build_time_series(rows: Vec<AlsiRecord>) -> Vec<AlsiTimeSeries> {
     group_time_series(
         rows,
-        |record: &AlsiRecord| AlsiSeriesKey::from(record),
+        compare_series_identity,
+        |record| AlsiSeriesKey::from(record),
         |record| record.gas_day_start,
     )
     .into_iter()
@@ -350,26 +352,34 @@ fn build_time_series(rows: Vec<AlsiRecord>) -> Vec<AlsiTimeSeries> {
     .collect()
 }
 
+fn compare_series_identity(left: &AlsiRecord, right: &AlsiRecord) -> Ordering {
+    left.code
+        .cmp(&right.code)
+        .then_with(|| left.name.cmp(&right.name))
+        .then_with(|| left.url.cmp(&right.url))
+}
+
 #[cfg(feature = "polars")]
 /// Converts a flat ALSI record slice into a `polars::DataFrame`.
 pub fn records_to_dataframe(rows: &[AlsiRecord]) -> Result<DataFrame, GieError> {
-    records_to_dataframe_from_iter(rows.iter())
+    records_to_dataframe_from_iter(rows.iter(), rows.len())
 }
 
 #[cfg(feature = "polars")]
 /// Converts ALSI time series into a flat `polars::DataFrame`.
 pub fn time_series_to_dataframe(series: &[AlsiTimeSeries]) -> Result<DataFrame, GieError> {
-    records_to_dataframe_from_iter(series.iter().flat_map(|entry| entry.points.iter()))
+    let capacity = series.iter().map(|entry| entry.points.len()).sum();
+    records_to_dataframe_from_iter(
+        series.iter().flat_map(|entry| entry.points.iter()),
+        capacity,
+    )
 }
 
 #[cfg(feature = "polars")]
-fn records_to_dataframe_from_iter<'a, I>(rows: I) -> Result<DataFrame, GieError>
+fn records_to_dataframe_from_iter<'a, I>(rows: I, capacity: usize) -> Result<DataFrame, GieError>
 where
     I: IntoIterator<Item = &'a AlsiRecord>,
 {
-    let rows = rows.into_iter();
-    let (capacity, _) = rows.size_hint();
-
     let mut common = CommonFrameColumns::with_capacity(capacity);
     let mut inventory = Vec::with_capacity(capacity);
     let mut send_out = Vec::with_capacity(capacity);
