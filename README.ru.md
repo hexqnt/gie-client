@@ -2,31 +2,31 @@
 
 [🇺🇸 English](./README.md) · [🇷🇺 Русский](./README.ru.md)
 
-A lightweight Rust client for GIE transparency APIs: **AGSI** and **ALSI**.
+Легковесный клиент на Rust для API прозрачности GIE: **AGSI** и **ALSI**.
 
 [![CI](https://github.com/hexqnt/gie-client/actions/workflows/ci.yml/badge.svg)](https://github.com/hexqnt/gie-client/actions/workflows/ci.yml)
 [![Live Contract](https://github.com/hexqnt/gie-client/actions/workflows/live-contract.yml/badge.svg)](https://github.com/hexqnt/gie-client/actions/workflows/live-contract.yml)
 [![crates.io](https://img.shields.io/crates/v/gie-client.svg)](https://crates.io/crates/gie-client)
 [![docs.rs](https://docs.rs/gie-client/badge.svg)](https://docs.rs/gie-client)
 
-## Features
+## Возможности
 
-- sync and async clients
-- works with or without `GIE_API_KEY`
-- proxy support
-- typed query builder (`GieQuery`)
-- pagination and time-series helpers
-- optional `polars` integration
-- optional `chrono` date backend
+- синхронные и асинхронные клиенты
+- работа с `GIE_API_KEY` и без него
+- поддержка прокси
+- типизированный конструктор запросов (`GieQuery`)
+- вспомогательные функции для пагинации и временных рядов
+- опциональная интеграция с `polars`
+- опциональная поддержка дат через `chrono`
 
-## Installation
+## Установка
 
 ```toml
 [dependencies]
 gie-client = "0.1"
 ```
 
-## Quick Start (Sync)
+## Быстрый старт (синхронный клиент)
 
 ```rust
 use gie_client::GieQuery;
@@ -47,7 +47,7 @@ let page = client.fetch_page(&query)?;
 println!("rows={}", page.data.len());
 ```
 
-## Quick Start (Async)
+## Быстрый старт (асинхронный клиент)
 
 ```rust
 use gie_client::GieQuery;
@@ -69,21 +69,21 @@ let series = client.fetch_time_series(&query).await?;
 println!("series={}", series.len());
 ```
 
-## Common Options
+## Основные настройки
 
-Proxy:
+Прокси:
 
 ```rust
 let client = gie_client::agsi::AgsiClient::with_proxy_without_api_key("http://127.0.0.1:8080")?;
 ```
 
-Debug requests:
+Отладка запросов:
 
 ```rust
 let client = gie_client::agsi::AgsiClient::without_api_key().with_debug_requests(true);
 ```
 
-Rate limit (default is enabled: 60 req/min, 60s cooldown on `429`):
+Ограничение частоты запросов (по умолчанию — 60 запросов в минуту и пауза 60 секунд после ответа `429`):
 
 ```rust
 let client = gie_client::agsi::AgsiClient::without_api_key()
@@ -92,13 +92,13 @@ let client = gie_client::agsi::AgsiClient::without_api_key()
 let client_no_limit = gie_client::agsi::AgsiClient::without_api_key().without_rate_limit();
 ```
 
-Custom User-Agent:
+Собственный `User-Agent`:
 
 ```rust
 let client = gie_client::agsi::AgsiClient::without_api_key().with_user_agent("MyApp/1.0");
 ```
 
-## Examples
+## Примеры
 
 ```bash
 cargo run --example agsi_snapshot_sync
@@ -107,20 +107,20 @@ cargo run --example alsi_time_series_async_external_client
 cargo run --example alsi_time_series_polars --features polars
 ```
 
-Environment variables used by examples:
+В примерах используются переменные окружения:
 
 - `GIE_API_KEY`
 - `GIE_PROXY_URL`
 - `GIE_USER_AGENT`
 
-## Live Contract Tests
+## Тесты контракта с API
 
-Live contract tests hit the real GIE API and are intentionally excluded from the default CI test job.
+Эти тесты обращаются к настоящему API GIE, поэтому они намеренно исключены из стандартного задания CI.
 
-Run live tests locally:
+Локальный запуск:
 
 ```bash
 GIE_LIVE_TESTS=1 cargo test --test live_api_contract -- --ignored
 ```
 
-Set `GIE_API_KEY` as well to include authenticated tests.
+Чтобы также запустить тесты с аутентификацией, задайте `GIE_API_KEY`.
