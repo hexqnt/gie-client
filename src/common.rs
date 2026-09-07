@@ -10,5 +10,6 @@ pub(crate) mod http_core;
 pub(crate) mod polars_core;
 pub(crate) mod query;
 pub(crate) mod serde_ext;
+pub(crate) mod text;
 pub(crate) mod time_series;
 pub(crate) mod types;

@@ -20,7 +20,7 @@ const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const DEFAULT_BROWSER_USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0";
 
-/// Настройки встроенного best-effort rate limiting для одного процесса.
+/// Configuration for built-in best-effort rate limiting within a process.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RateLimitConfig {
     pub(crate) max_requests_per_minute: NonZeroU32,
@@ -272,7 +272,7 @@ where
         all_rows.reserve(extra_capacity);
     }
 
-    while last_page != 0 && next_page.get() < last_page {
+    while next_page.get() < last_page {
         next_page = next_page_number(next_page)?;
 
         let response = fetch_page(next_page)?;
@@ -284,11 +284,7 @@ where
 }
 
 fn next_page_number(current: NonZeroU32) -> Result<NonZeroU32, GieError> {
-    let next = current
-        .get()
-        .checked_add(1)
-        .ok_or_else(page_overflow_error)?;
-    NonZeroU32::new(next).ok_or_else(page_overflow_error)
+    current.checked_add(1).ok_or_else(page_overflow_error)
 }
 
 fn page_overflow_error() -> GieError {
@@ -400,7 +396,7 @@ where
         all_rows.reserve(extra_capacity);
     }
 
-    while last_page != 0 && next_page.get() < last_page {
+    while next_page.get() < last_page {
         next_page = next_page_number(next_page)?;
 
         let response = fetch_page(next_page).await?;

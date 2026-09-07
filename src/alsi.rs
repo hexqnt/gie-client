@@ -388,9 +388,9 @@ where
 
     for row in rows {
         common.push(
-            &row.name,
-            &row.code,
-            &row.url,
+            row.name.as_deref(),
+            row.code.as_deref(),
+            row.url.as_deref(),
             row.gas_day_start,
             row.info.as_deref(),
             row.children.as_deref(),
@@ -485,9 +485,17 @@ mod tests {
         ];
 
         let frame = records_to_dataframe(&rows).unwrap();
+        drop(rows);
         assert_eq!(frame.height(), 2);
         assert_eq!(frame.width(), 10);
-        assert!(frame.column("code").is_ok());
+        let codes = frame.column("code").unwrap().str().unwrap();
+        assert_eq!(codes.get(0), Some("FR-1"));
+        assert_eq!(codes.get(1), Some("FR-2"));
+        assert_eq!(
+            frame.column("name").unwrap().str().unwrap().get(0),
+            Some("Terminal 1")
+        );
+        assert_eq!(frame.column("url").unwrap().null_count(), 2);
         assert!(frame.column("inventory").is_ok());
     }
 

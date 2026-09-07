@@ -1,6 +1,5 @@
 use serde_json::Value;
 
-#[cfg(feature = "polars")]
 use polars::prelude::{Column, NamedFrom, Series};
 
 use crate::error::GieError;
@@ -8,21 +7,19 @@ use crate::error::GieError;
 use super::serde_ext::json_vec_to_string;
 use super::types::{GieDate, format_date};
 
-#[cfg(feature = "polars")]
-/// Shared builder for columns present in both AGSI and ALSI dataframe conversions.
+/// Shared column builder for AGSI and ALSI DataFrames.
 #[derive(Debug)]
-pub(crate) struct CommonFrameColumns {
-    name: Vec<Option<String>>,
-    code: Vec<Option<String>>,
-    url: Vec<Option<String>>,
+pub(crate) struct CommonFrameColumns<'a> {
+    name: Vec<Option<&'a str>>,
+    code: Vec<Option<&'a str>>,
+    url: Vec<Option<&'a str>>,
     gas_day_start: Vec<Option<String>>,
     info_json: Vec<Option<String>>,
     children_json: Vec<Option<String>>,
 }
 
-#[cfg(feature = "polars")]
-impl CommonFrameColumns {
-    /// Creates an empty column builder with preallocated capacity.
+impl<'a> CommonFrameColumns<'a> {
+    /// Creates a column builder with preallocated capacity.
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             name: Vec::with_capacity(capacity),
@@ -34,31 +31,31 @@ impl CommonFrameColumns {
         }
     }
 
-    /// Pushes one logical row into shared columns.
+    /// Appends a row to the shared columns.
     pub(crate) fn push(
         &mut self,
-        name: &Option<String>,
-        code: &Option<String>,
-        url: &Option<String>,
+        name: Option<&'a str>,
+        code: Option<&'a str>,
+        url: Option<&'a str>,
         gas_day_start: Option<GieDate>,
         info: Option<&[Value]>,
         children: Option<&[Value]>,
     ) -> Result<(), GieError> {
-        self.name.push(name.clone());
-        self.code.push(code.clone());
-        self.url.push(url.clone());
+        self.name.push(name);
+        self.code.push(code);
+        self.url.push(url);
         self.gas_day_start.push(gas_day_start.map(format_date));
         self.info_json.push(json_vec_to_string(info)?);
         self.children_json.push(json_vec_to_string(children)?);
         Ok(())
     }
 
-    /// Returns the number of rows collected so far.
+    /// Returns the number of appended rows.
     pub(crate) fn height(&self) -> usize {
         self.name.len()
     }
 
-    /// Returns `(prefix, suffix)` column groups used by endpoint-specific dataframe builders.
+    /// Returns prefix and suffix columns for endpoint-specific DataFrame builders.
     pub(crate) fn into_polars_columns(self) -> (Vec<Column>, Vec<Column>) {
         let prefix = vec![
             Series::new("name".into(), self.name).into(),

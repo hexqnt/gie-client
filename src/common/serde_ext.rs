@@ -6,6 +6,7 @@ use serde_json::Value;
 #[cfg(feature = "polars")]
 use crate::error::GieError;
 
+use super::text::normalize_optional_text;
 use super::types::{
     DatasetName, DatasetType, GieDate, RecordType, format_date, parse_dataset_name, parse_date,
     parse_record_type,
@@ -203,17 +204,6 @@ fn non_empty_trimmed(value: &str) -> Option<&str> {
         return None;
     }
     Some(trimmed)
-}
-
-fn normalize_optional_text(value: String) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed.len() == value.len() {
-        return Some(value);
-    }
-    Some(trimmed.to_string())
 }
 
 #[cfg(feature = "polars")]

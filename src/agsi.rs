@@ -425,9 +425,9 @@ where
 
     for row in rows {
         common.push(
-            &row.name,
-            &row.code,
-            &row.url,
+            row.name.as_deref(),
+            row.code.as_deref(),
+            row.url.as_deref(),
             row.gas_day_start,
             row.info.as_deref(),
             row.children.as_deref(),
@@ -441,7 +441,7 @@ where
         working_gas_volume.push(row.working_gas_volume);
         injection_capacity.push(row.injection_capacity);
         withdrawal_capacity.push(row.withdrawal_capacity);
-        status.push(row.status.clone());
+        status.push(row.status.as_deref());
         trend.push(row.trend);
         full.push(row.full);
     }
@@ -538,9 +538,17 @@ mod tests {
         ];
 
         let frame = records_to_dataframe(&rows).unwrap();
+        drop(rows);
         assert_eq!(frame.height(), 2);
         assert_eq!(frame.width(), 18);
-        assert!(frame.column("code").is_ok());
+        let codes = frame.column("code").unwrap().str().unwrap();
+        assert_eq!(codes.get(0), Some("DE-1"));
+        assert_eq!(codes.get(1), Some("DE-2"));
+        assert_eq!(
+            frame.column("name").unwrap().str().unwrap().get(0),
+            Some("Site 1")
+        );
+        assert_eq!(frame.column("url").unwrap().null_count(), 2);
         assert!(frame.column("gas_in_storage").is_ok());
     }
 

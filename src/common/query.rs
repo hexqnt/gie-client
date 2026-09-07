@@ -28,14 +28,7 @@ impl QueryText {
     }
 
     fn parse_lossy(value: String) -> Option<Self> {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        if trimmed.len() == value.len() {
-            return Some(Self(value));
-        }
-        Some(Self(trimmed.to_string()))
+        super::text::normalize_optional_text(value).map(Self)
     }
 }
 
@@ -194,7 +187,7 @@ impl GieQuery {
     }
 
     pub(crate) fn initial_page(&self) -> NonZeroU32 {
-        self.page.unwrap_or_else(default_page)
+        self.page.unwrap_or(NonZeroU32::MIN)
     }
 
     pub(crate) fn as_params_with_page(
@@ -298,21 +291,9 @@ pub(crate) struct GieQueryParams<'a> {
     size: Option<NonZeroU32>,
 }
 
-fn default_page() -> NonZeroU32 {
-    NonZeroU32::new(1).expect("1 is non-zero")
-}
-
 fn parse_required_text_filter(field_name: &str, value: String) -> Result<QueryText, GieError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(GieError::InvalidTextFilterInput(format!(
-            "{field_name} must not be blank"
-        )));
-    }
-    if trimmed.len() == value.len() {
-        return Ok(QueryText(value));
-    }
-    Ok(QueryText(trimmed.to_string()))
+    QueryText::parse_lossy(value)
+        .ok_or_else(|| GieError::InvalidTextFilterInput(format!("{field_name} must not be blank")))
 }
 
 #[cfg(test)]
